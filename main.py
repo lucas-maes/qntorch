@@ -1,12 +1,14 @@
 import torch
+import matplotlib.pyplot as plt
+import numpy as np
 
-from xitorch.optimize import rootfinder
+from scipy.optimize import bisect
 from utils import random_linear_function
+from tracker import OptimTracker
 
+class CubicRegNewton:
 
-class CubicNewton:
-
-	def __init__(self, f, grad, hessian, L=1.0):
+	def __init__(self, tracker, f, grad, hessian, L=1.0):
 
 		""" Cubic Newton Optimizer
 		
@@ -22,10 +24,11 @@ class CubicNewton:
 		self.grad = grad
 		self.hessian = hessian
 		self.L = L
+		self.tracker = tracker
 
 		return
 
-	def next_r(self, x):
+	def next_r(self, x, A, V):
 		"""
 		Find r_k+1 given x where r_k+1 = ||x_t+1 - x_t||
 
@@ -38,31 +41,30 @@ class CubicNewton:
 		r_next: the r_k+1 (tensor)
 		"""
 
-		# Eeigen Decomposition of the Hessian evaluated at x
-		A, V = torch.linalg.eig(self.hessian(x))
-
-		A = A.real
-		V = V.real
-
 		# make idenity of the size of A
-		I = torch.eye(A.size(0))
+		I = torch.eye(V.size(0))
 
 		# compute g_k
 		g_k = V @ self.grad(x)
 
 		# define objective function to find r
 		def phi_k(r):
-			inv = torch.inverse((A + L/2*r*I))
-			return r - torch.norm(inv @ g_k )
+			#c = torch.linalg.solve((A + (L/2)*r*I), g_k)
+			c = torch.linalg.solve((self.hessian(x) + (L/2)*r*I), self.grad(x))
+			return (r - c.norm(p=2)).numpy()
 
 		# find search interval
 		r_min, r_max = self.find_r_interval(phi_k)
 
-		# start at the average of the searching interval
-		x0 = (r_max - r_min) / 2
-
 		# find r_k+1 as the the root of phi_k(r)
-		r_next = rootfinder(phi_k, x0)
+		r_next = bisect(phi_k, r_min, r_max)
+
+		# log interesting stuff
+		self.tracker(search_bound=(r_min, r_max),
+					 r_next=r_next,
+					 A=A,
+					 V=V,
+					 g_k=g_k)
 
 		return r_next
 
@@ -80,11 +82,8 @@ class CubicNewton:
 		(r_min, r_max): a tuple containing the bound of the search interval (tensor tuple)
 		"""
 
-		if type(start) != torch.Tensor:
-			start = torch.tensor(start)
-
+		r_min = 0
 		r_max = start
-		r_min = start
 
 		while phi_k(r_max) < 0:
 			r_min = r_max
@@ -106,15 +105,55 @@ class CubicNewton:
 
 		"""
 
-		h_x = self.hessian(x)
+		# compute useful quantities
+		H_x = self.hessian(x)
 		g_x = self.grad(x)
-		r_next = self.next_r(x)
+		f_x = self.f(x)
+		I = torch.eye(H_x.size(0))
 
-		inv = torch.inverse(h_x + (L*r_next/2))
+		# compute eigen-value decomposition
+		A, V = torch.linalg.eig(H_x)
+		A = torch.diag(A.real)
+		V = V.real
 
-		x_next = x - inv @ g_x
+		# compute r_k+1 and g_k
+		r_next = self.next_r(x, A, V)
+		g_k = V @ g_x
+
+		# compute the update
+		#updt = torch.linalg.solve((A + (L/2)*r_next*I) , g_k)
+		updt = torch.linalg.solve((H_x + (L/2)*r_next*I), g_x)
+
+		# update rule
+		x_next = x - updt
 
 		return x_next
+
+	def solve(self, x0, n_iter=100, use_eps=True, eps=10e-10):
+
+		x = x0
+		count = 0
+
+		for step in range(n_iter):
+
+			count = step + 1
+
+			last_x = x
+			x = self.step(x)
+
+			dist = round(torch.norm(x - last_x, p=2).item(), 6)
+
+			self.tracker(last_x=last_x,
+					   x=x,
+					   f_x=self.f(x),
+					   step=step,
+					   iter_dist=dist)
+
+			if use_eps:
+				if dist <= eps:
+					break
+
+		return x
 
 
 # =========== PLAYGROUND =================
@@ -126,18 +165,18 @@ if __name__ == "__main__":
 	L = 1.0
 
 	# Objects
+	tracker = OptimTracker()
 	f, grad, hessian = random_linear_function(SIZE, L=L)
-	cn = CubicNewton(f, grad, hessian, L=L)
+	cn = CubicRegNewton(tracker, f, grad, hessian, L=L)
 
-	# Test
+	# Testing the solver
 	x0 = torch.randn(SIZE,)
+	cn.solve(x0)
 
-	x = x0
-	last_x = None
+	cn.tracker.print("r_next")
+	cn.tracker.print("search_bound")
 
-	for step in range(100):
+	# Plot optim path : {f(x_k) | forall k}
+	plt.semilogy(cn.tracker.get("f_x"))
+	plt.show()
 
-		last_x = x
-		x = cn.step(x)
-
-		print("||x_k+1 - x_k||: ", round(torch.norm(x - last_x).item(), 6))
