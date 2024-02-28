@@ -8,6 +8,16 @@ class CubicNewton:
 
 	def __init__(self, f, grad, hessian, L=1.0):
 
+		""" Cubic Newton Optimizer
+		
+		params:
+		-------
+		f: a function that can be evaluated given a tensor (callable)
+		grad: the gradient of f (callable)
+		hessian: the hessiance of f (callable)
+		L: the lipshitz constant of the gradient (float)
+		"""
+
 		self.f = f
 		self.grad = grad
 		self.hessian = hessian
@@ -16,6 +26,17 @@ class CubicNewton:
 		return
 
 	def next_r(self, x):
+		"""
+		Find r_k+1 given x where r_k+1 = ||x_t+1 - x_t||
+
+		params:
+		------
+		x: the current iterate (tensor)
+
+		returns:
+		-------
+		r_next: the r_k+1 (tensor)
+		"""
 
 		# Eeigen Decomposition of the Hessian evaluated at x
 		A, V = torch.linalg.eig(self.hessian(x))
@@ -46,6 +67,18 @@ class CubicNewton:
 		return r_next
 
 	def find_r_interval(self, phi_k, start=1.0):
+		"""
+		Determine a search interval for finding roots of phi_k(.)
+
+		params:
+		------
+		phi_k: the objective function for finding r (callable)
+		start: the initial point to determine the interval (float)
+
+		returns:
+		-------
+		(r_min, r_max): a tuple containing the bound of the search interval (tensor tuple)
+		"""
 
 		if type(start) != torch.Tensor:
 			start = torch.tensor(start)
@@ -60,6 +93,18 @@ class CubicNewton:
 		return (r_min, r_max)
 
 	def step(self, x):
+		"""
+		Take an cubic newton optimization step from the current iterate
+	
+		params:
+		------
+		x: the current iterate (tensor)
+
+		returns:
+		-------
+		x_next: the next iterate (tensor)
+
+		"""
 
 		h_x = self.hessian(x)
 		g_x = self.grad(x)
@@ -71,11 +116,14 @@ class CubicNewton:
 
 		return x_next
 
+
+# =========== PLAYGROUND =================
+
 if __name__ == "__main__":
 
 	# Global variables
 	SIZE = 100
-	L = 10.0
+	L = 1.0
 
 	# Objects
 	f, grad, hessian = random_linear_function(SIZE, L=L)

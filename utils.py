@@ -30,5 +30,4 @@ def random_linear_function(size, L=1.0):
 		return H
 
 
-
 	return f, grad, hessian
