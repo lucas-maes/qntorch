@@ -99,19 +99,16 @@ class CubicRegNewton:
 		g_x = self.grad(x)
 		h_x = self.hessian(x)
 
-
-		xydiff = x - y
+		xydiff = y-x
 
 		cond = f_x + g_x @ (xydiff) + (self.L/2) * (xydiff.T @ h_x @ xydiff) + (self.L/6) * xydiff.norm(p=2).pow_(3)
 
-		while f_y <= cond:
-
-			x_next = y
-			self.L = self.L / 2
-
-
-		self.L = self.L * 2 
-
+		if f_y <= cond:
+			self.L = self.L/2
+			return True
+		else:
+			self.L = self.L * 2
+			return False
 
 	def step(self, x):
 		"""
@@ -129,6 +126,7 @@ class CubicRegNewton:
 
 		# compute useful quantities
 		H_x = self.hessian(x)
+
 		g_x = self.grad(x)
 		f_x = self.f(x)
 		I = torch.eye(H_x.size(0))
@@ -147,6 +145,17 @@ class CubicRegNewton:
 
 		# update rule
 		x_next = x - updt
+
+		# perform back-tracking line-search to find optimal L
+		count = 0
+		while self.bt_linesearch(x_next, x):
+			count += 1
+			updt = V @ torch.linalg.solve((A + (self.L/2)*r_next*I) , g_k)
+			x_next = x - updt
+
+
+		self.tracker(bt_linesearch_count=count,
+					 L=self.L)
 
 		return x_next
 
