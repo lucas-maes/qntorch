@@ -29,6 +29,6 @@ if __name__ == "__main__":
 	cn.tracker.print("search_bound")
 
 	# Plot optim path : {f(x_k) | forall k}
-	plt.semilogy(cn.tracker.get("f_x"))
+	plt.semilogy(cn.tracker.get("g_norm"))
 	plt.show()
 

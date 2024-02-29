@@ -150,12 +150,14 @@ class CubicRegNewton:
 		count = 0
 		while self.bt_linesearch(x_next, x):
 			count += 1
+			r_next = self.next_r(x, A, V)
 			updt = V @ torch.linalg.solve((A + (self.L/2)*r_next*I) , g_k)
 			x_next = x - updt
 
 
 		self.tracker(bt_linesearch_count=count,
-					 L=self.L)
+					 L=self.L,
+					 g_norm=g_x.norm(p=2).item())
 
 		return x_next
 
