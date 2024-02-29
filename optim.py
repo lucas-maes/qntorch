@@ -60,11 +60,7 @@ class CubicRegNewton:
 		r_next = bisect(phi_k, r_min, r_max)
 
 		# log interesting stuff
-		self.tracker(search_bound=(r_min, r_max),
-					 r_next=r_next,
-					 A=A,
-					 V=V,
-					 g_k=g_k)
+		self.tracker(search_bound=(r_min, r_max))
 
 		return r_next
 
@@ -91,24 +87,14 @@ class CubicRegNewton:
 
 		return (r_min, r_max)
 
-	def bt_linesearch(self, y, x):
+	def linesearch_check(self, y, x, g_x, h_x):
 
 		f_y = self.f(y)
 		f_x = self.f(x)
-
-		g_x = self.grad(x)
-		h_x = self.hessian(x)
-
 		xydiff = y-x
-
 		cond = f_x + g_x @ (xydiff) + (self.L/2) * (xydiff.T @ h_x @ xydiff) + (self.L/6) * xydiff.norm(p=2).pow_(3)
 
-		if f_y <= cond:
-			self.L = self.L/2
-			return True
-		else:
-			self.L = self.L * 2
-			return False
+		return f_y <= cond
 
 	def step(self, x):
 		"""
@@ -123,6 +109,9 @@ class CubicRegNewton:
 		x_next: the next iterate (tensor)
 
 		"""
+
+		# devise L by 2 by default
+		self.L = self.L / 2
 
 		# compute useful quantities
 		H_x = self.hessian(x)
@@ -148,15 +137,33 @@ class CubicRegNewton:
 
 		# perform back-tracking line-search to find optimal L
 		count = 0
-		while self.bt_linesearch(x_next, x):
-			count += 1
-			r_next = self.next_r(x, A, V)
-			updt = V @ torch.linalg.solve((A + (self.L/2)*r_next*I) , g_k)
-			x_next = x - updt
 
+		# while cond is not satisfy increase L
+		while not self.linesearch_check(x_next, x, g_x, H_x):
+			count += 1
+
+			# increase L
+			self.L = self.L * 2
+
+			# recompute quantities depending on L
+			# r_next
+			r_next = self.next_r(x, A, V)
+			# the update direction
+			updt = V @ torch.linalg.solve((A + (self.L/2)*r_next*I) , g_k)
+
+			# recompute x_next with new L
+			x_next = x - updt			
 
 		self.tracker(bt_linesearch_count=count,
 					 L=self.L,
+					 r_next=r_next,
+					 A=A,
+					 V=V,
+					 g_k=g_k,
+					 H_x=H_x,
+					 g_x=g_x,
+					 update=updt,
+					 true_update=(V @ torch.linalg.solve((H_x + (self.L/2)*r_next*I) , g_x)), 
 					 g_norm=g_x.norm(p=2).item())
 
 		return x_next

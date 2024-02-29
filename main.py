@@ -25,10 +25,12 @@ if __name__ == "__main__":
 	x0 = torch.randn(SIZE,)
 	cn.solve(x0)
 
-	cn.tracker.print("r_next")
-	cn.tracker.print("search_bound")
+	#cn.tracker.print("r_next")
+	#cn.tracker.print("search_bound")
 
 	# Plot optim path : {f(x_k) | forall k}
 	plt.semilogy(cn.tracker.get("g_norm"))
+	plt.xlabel("steps")
+	plt.ylabel("grad(x) norm")
 	plt.show()
 
