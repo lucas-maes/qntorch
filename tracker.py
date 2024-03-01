@@ -31,14 +31,14 @@ class OptimTracker:
 		return
 
 
-	def get(self, key, numpy=False, torch=False):
+	def get(self, key, np=False, t=False):
 
 		data = self.data[key] if key in self.data else None
 
 		if data:
-			if torch:
+			if t:
 				data = torch.tensor(data)
-			if numpy:
+			if np:
 				data = np.array(data)
 
 		return data
