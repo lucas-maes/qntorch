@@ -78,7 +78,7 @@ class Algorithm:
 
 class CubicRegNewton(Algorithm):
 
-	def __init__(self, tracker, f, grad, hessian, L=1.0):
+	def __init__(self, tracker, f, grad, hessian, L=1.0, **kwargs):
 
 		""" Cubic Newton Optimizer
 
@@ -90,7 +90,7 @@ class CubicRegNewton(Algorithm):
 		L: the lipshitz constant of the gradient (float)
 		"""
 
-		super().__init__(tracker)
+		super().__init__(tracker, **kwargs)
 
 		self.f = f
 		self.grad = grad
@@ -175,7 +175,7 @@ class CubicRegNewton(Algorithm):
 		f_y = self.f(y)
 		f_x = self.f(x)
 		xydiff = y-x
-		cond = f_x + g_x @ (xydiff) + (self.L/2) * (xydiff.T @ h_x @ xydiff) + (self.L/6) * xydiff.norm(p=2).pow_(3)
+		cond = f_x + g_x @ (xydiff) + (self.L/2) * (xydiff.t() @ h_x @ xydiff) + (self.L/6) * xydiff.norm(p=2).pow_(3)
 
 		return f_y <= cond
 
@@ -204,14 +204,7 @@ class CubicRegNewton(Algorithm):
 		# take a step
 		x_next = x - updt
 
-		# log
-		self.tracker(
-			r_next = r_next,
-			preconditioner = preconditioner,
-			update=updt,
-			)
-
-		return x_next, r_next
+		return x_next, r_next, updt
 
 	def step(self, x):
 		"""
@@ -248,7 +241,7 @@ class CubicRegNewton(Algorithm):
 		# ---    ----    --- 
 
 		# update rule
-		x_next, r_next = self._update(x, A, V, proj_g)
+		x_next, r_next, update = self._update(x, A, V, proj_g)
 
 
 		# perform back-tracking line-search to find optimal L
@@ -263,21 +256,23 @@ class CubicRegNewton(Algorithm):
 			self.L = self.L * 2
 
 			# recompute x_next with new L
-			x_next, r_next = self._update(x, A, V, proj_g)
+			x_next, r_next, update = self._update(x, A, V, proj_g)
 
 		# logging quantities on tracker
 		self.tracker(bt_linesearch_count=count,
 					 L=self.L,
 					 A=A,
 					 V=V,
+					 f_x=f_x,
 					 g_k=proj_g,
 					 H_x=H_x,
 					 g_x=g_x,
-					 true_update=(V @ torch.linalg.solve((H_x + (self.L/2)*r_next*I) , g_x)), 
-					 g_norm=g_x.norm(p=2).item())
+					 true_update=(torch.linalg.solve((H_x + (self.L/2)*r_next*I) , g_x)), 
+					 g_norm=g_x.norm(p=2).item(),
+					 r_next = r_next,
+					 update=update)
 
 		return x_next
-
 
 class QuasiNewton(Optimizer):
 	def __init__(self):
