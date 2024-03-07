@@ -16,13 +16,14 @@ if __name__ == "__main__":
 	torch.set_default_dtype(torch.float64)
 
 	# Global variables
-	SIZE = 100
+	SIZE = 10
 	L = 1.0
+	steps = 50
 
 	# Objects
 	tracker = OptimTracker()
 	f, grad, hessian = random_linear_function(SIZE, L=L)
-	cn = CubicRegNewton(tracker, f, grad, hessian, L=L, n_iter=100)
+	cn = CubicRegNewton(tracker, f, grad, hessian, L=L, n_iter=steps)
 
 	# Testing the solver
 	x0 = torch.randn(SIZE,)

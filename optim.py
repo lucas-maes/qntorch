@@ -175,7 +175,7 @@ class CubicRegNewton(Algorithm):
 		f_y = self.f(y)
 		f_x = self.f(x)
 		xydiff = y-x
-		cond = f_x + g_x @ (xydiff) + (self.L/2) * (xydiff.t() @ h_x @ xydiff) + (self.L/6) * xydiff.norm(p=2).pow_(3)
+		cond = f_x + g_x @ (xydiff) + (1/2) * (xydiff.t() @ h_x @ xydiff) + (self.L/6) * xydiff.norm(p=2).pow_(3)
 
 		return f_y <= cond
 
