@@ -2,9 +2,9 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 
-from optim import CubicRegNewton
-from utils import random_linear_function, condition_number
-from tracker import OptimTracker
+from qntorch.algorithm import CubicRegNewton
+from qntorch.utils import random_linear_function, condition_number
+from qntorch.tracker import OptimTracker
 
 import torch
 

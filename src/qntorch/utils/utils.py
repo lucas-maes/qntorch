@@ -1,5 +1,4 @@
 import torch
-
 import math
 
 def random_linear_function(size, L=1.0):
