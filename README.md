@@ -14,7 +14,7 @@ pip3 install -e.
 
 ```python
 import torch
-from qntorch import CubicRegNewton, OptimTracker, random_linear_system
+from qntorch import CubicRegNewton, OptimTracker, random_linear_function
 
 # set default dtype to float64
 torch.set_default_dtype(torch.float64)
