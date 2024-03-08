@@ -1,13 +1,10 @@
 
 import torch
-import matplotlib.pyplot as plt
-import numpy as np
-
 from scipy.optimize import bisect
-from torch.optim import Optimizer
 
 from .algorithm import Algorithm
-from qntorch.tracker import OptimTracker
+
+from qntorch.utils import grad, hessian
 
 class CubicRegNewton(Algorithm):
 
@@ -158,8 +155,9 @@ class CubicRegNewton(Algorithm):
 
 		# ---  compute useful quantities (one-time) ---
 
-		H_x = self.hessian(x)
-		g_x = self.grad(x)
+		H_x = hessian(self.f, x)
+		g_x = grad(self.f, x)
+
 		f_x = self.f(x)
 		I = torch.eye(H_x.size(0))
 

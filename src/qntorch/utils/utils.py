@@ -1,6 +1,15 @@
 import torch
 import math
 
+def randlinf(size, L=1.0):
+	return 
+
+def grad(f, x):
+	return torch.autograd.functional.jacobian(f, x)
+
+def hessian(f, x):
+	return torch.autograd.functional.hessian(f, x)
+
 def random_linear_function(size, L=1.0):
 
 	A = torch.randn((size, size))
@@ -11,20 +20,20 @@ def random_linear_function(size, L=1.0):
 		if type(x) != torch.Tensor:
 			x = torch.tensor(x)
 
-		return (torch.norm(A @ x - b).pow_(2).div_(2)) + L/6 * torch.norm(x).pow_(3)
+		return (torch.norm(A @ x - b).pow(2).div(2)) + L/6 * torch.norm(x).pow(3)
 
 	def grad(x):
 
 		if type(x) != torch.Tensor:
 			x = torch.tensor(x)
 
-		return (A.T @ (A @ x - b)) + L/2 * torch.norm(x) * x  
+		return (A.T @ (A @ x - b)) + (L/2) * torch.norm(x) * x  
 
 	def hessian(x):
 		if type(x) != torch.Tensor:
 			x = torch.tensor(x)
-
-		H = (A.T @ A) + L * (x @ x.t()).div_(torch.norm(x))
+		
+		H = (A.T @ A) + (((L/2) * x.pow(2).div(torch.norm(x, p=2)) + (L/2) * torch.norm(x, p=2)) * torch.eye(size))
 
 		return H
 
