@@ -26,12 +26,12 @@ steps = 100
 
 # initialize the solver
 tracker = OptimTracker()    # crate a tracker for logging
-f, grad, hessian = random_linear_function(SIZE, L=L) # generate an optim problem
-cn = CubicRegNewton(tracker, f, grad, hessian, L=L, n_iter=steps) # create a solver
+f, _, _ = random_linear_function(SIZE, L=L) # generate an optim problem
+x0 = torch.randn(SIZE,) # initial condition
+cn = CubicRegNewton(x0, f, tracker, L=L, n_iter=steps) # create a solver
 
 # solve the problem
-x0 = torch.randn(SIZE,)
-x_star = cn.solve(x0)
+x_star = cn.solve()
 print(x_star)
 ```
 

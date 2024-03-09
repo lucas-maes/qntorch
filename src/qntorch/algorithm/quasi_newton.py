@@ -1,31 +1,33 @@
 
 import torch
 from scipy.optimize import bisect
-from .algorithm import Algorithm
 
+from qntorch.algorithm import Algorithm, CubicRegNewton
 from qntorch.utils import grad, hessian
 
 class QuasiNewton(Algorithm):
 
-	def __init__(self, tracker, f, grad, hessian, L=1.0, N=25, **kwargs):
+	def __init__(self, x0, f, tracker, L=1.0, N=25, **kwargs):
 
 		""" Quasi Newton Optimizer
 
 		params:
 		-------
+		x0: the initial point (tensor)
 		f: a function that can be evaluated given a tensor (callable)
-		grad: the gradient of f (callable)
-		hessian: the hessiance of f (callable)
 		L: the lipshitz constant of the gradient (float)
 		"""
 
-		super().__init__(tracker, **kwargs)
+		super().__init__(x0, f, tracker, **kwargs)
 
-		self.f = f
-		self.grad = grad
-		self.hessian = hessian
 		self.M = L
 		self.N = N
+
+		self.Dt = torch.empty(self.size, self.N)
+		self.Gt = torch.empty_like(self.Dt)
+		self.Yt = torch.empty_like(self.Dt)
+		self.Zt = torch.empty_like(self.Dt)
+		self.alpha_t = torch.empty(self.N)
 
 		return
 
@@ -39,16 +41,14 @@ class QuasiNewton(Algorithm):
 
 		return fy >= cond
 
-
 	def _update_Gt_eps(self, xt, Yt, Zt):
 		# TODO optim: store all previous grad and compute just grad for the new element that I append
 		Yt_grad = torch.tensor([grad(self.f, Yt[:, i]).div(norms[i]) for i in range(Yt.size(1))])
 		Zt_grad = torch.tensor([grad(self.f, Zt[:, i]).div(norms[i]) for i in range(Zt.size(1))])
 		norms = (Yt - Zt).norm(p=2, dim=0)
-        Gt = (Yt_grad - Zt_grad).div(norms.unsqueeze(0))
-        eps_t = norms + 2 * (Zt - xt.unsqueeze(1)).norm(p=2, dim=0)
+		Gt = (Yt_grad - Zt_grad).div(norms.unsqueeze(0))
+		eps_t = norms + 2 * (Zt - xt.unsqueeze(1)).norm(p=2, dim=0)
 		return Gt, eps_t
-
 
 	def orth_random_dir(self, xt, h):
 
@@ -63,42 +63,45 @@ class QuasiNewton(Algorithm):
 
 		return (grad(self.f, xt), Dt, Gt, Yt, Zt, eps_t)
 
+	def orth_forward_estimate(self, xt, h, Dt_prev, Gt_prev, Yt_prev, Zt_prev):
 
-    def orth_forward_estimate(self, xt, h, Dt_prev, Gt_prev, Yt_prev, Zt_prev):
-	
-        # if # col of Dt_prev, Gt_prev, Yt_prev, Zt_prev > N, remove the first column
-        mats = (Dt_prev, Gt_prev, Yt_prev, Zt_prev)
-		
-        for mat in mats:
-            if mat.size(1) > self.N:
-                mat = mat[:, 1:]
-		
-        Dt_prev, Gt_prev, Yt_prev, Zt_prev = mats
-		
-        # compute gt = grad(f, xt)
+		# if # col of Dt_prev, Gt_prev, Yt_prev, Zt_prev > N, remove the first column
+		mats = (Dt_prev, Gt_prev, Yt_prev, Zt_prev)
+
+		for mat in mats:
+			if mat.size(1) > self.N:
+				mat = mat[:, 1:]
+
+		Dt_prev, Gt_prev, Yt_prev, Zt_prev = mats
+
+		# compute gt = grad(f, xt)
 		gt = grad(self.f, xt)
-		
-        # compiute dt = - dtild / ||dtild||
-		dtild = gt - Dt_prev @ (Dt_prev.t() @ gt)
-        dt = - dtild / dtild.norm(p=2)
-        
-        # compute orthogonal forward estimate
-        xt_half = xt + h * dt
 
-        # append new column to Dt_prev, Gt_prev, Yt_prev, Zt_prev
-        Yt = torch.cat((Yt_prev, xt_half), dim=1)
+		# compiute dt = - dtild / ||dtild||
+		dtild = gt - Dt_prev @ (Dt_prev.t() @ gt)
+		dt = - dtild / dtild.norm(p=2)
+
+		# compute orthogonal forward estimate
+		xt_half = xt + h * dt
+
+		# append new column to Dt_prev, Gt_prev, Yt_prev, Zt_prev
+		Yt = torch.cat((Yt_prev, xt_half), dim=1)
 		Zt = torch.cat((Zt_prev, xt), dim=1)
-        Dt = torch.cat((Dt_prev, dt), dim=1)
+		Dt = torch.cat((Dt_prev, dt), dim=1)
 
 		Gt, eps_t = self._update_Gt_eps(xt, Yt, Zt)
 
-        return (gt, Dt, Gt, Yt, Zt, eps_t)
+		return (gt, Dt, Gt, Yt, Zt, eps_t)
 
+	def find_alpha(self, x, gx_t, Hx_t, Dt):
+		subf = lambda alpha: self.f(x) + gx_t.t() @ (Dt @ alpha) + (1/2) * (alpha.t() @ Hx_t @ alpha) + (self.M/6) * (Dt @ alpha).norm(p=2).pow_(3)
+		solver = CubicRegNewton(self.tracker, subf, L=self.M) # build the solver
+		return solver.solve(self.alpha_t) # solve the problem
 
-	def step(self, x):
+	def step(self, x, h=10e-9):
 
 		# update Yt, Zt, Dt, Gt, eps_t
-		gx_t, Dt, Gt, Yt, Zt, eps_t = self.orth_forward_estimate(x, self.L, Dt, Gt, Yt, Zt)
+		gx_t, Dt, Gt, Yt, Zt, eps_t = self.orth_forward_estimate(x, h, Dt, Gt, Yt, Zt)
 
 		# devise smoothness constant M by 2 by default
 		self.M = self.M / 2
@@ -106,19 +109,19 @@ class QuasiNewton(Algorithm):
 		# line search to find optimal coefficient (steps size)
 
 		# approx hessian (make sur its symmetric)
-		Hx_t = ((Gt.t() @ D) + (D.t() @ Gt)) / 2
-		Hx_t = Ht_x + (self.M/2) * torch.eye(self.N) * Dt.norm()* eps_t.norm()
+		Hx_t = ((Gt.t() @ Dt) + (Dt.t() @ Gt)) / 2
+		Hx_t = Hx_t + (self.M/2) * torch.eye(self.N) * Dt.norm()* eps_t.norm()
 
 		# find alpha_t optimal
-		alpha_t = ...
+		self.alpha_t = self.find_alpha(x, gx_t, Hx_t, Dt)
 
 		# compute next iterate
-		x_next = x + Dt @ alpha_t
+		x_next = x + Dt @ self.alpha_t
 		
 		# perform line search
 		count = 0
 		# while condition is not satisfy increase L
-		while not self._linesearch_check(x_next, x, gx_t, Hx_t, Dt, alpha_t):
+		while not self._linesearch_check(x_next, x, gx_t, Hx_t, Dt, self.alpha_t):
 
 			count += 1
 
@@ -126,15 +129,16 @@ class QuasiNewton(Algorithm):
 			self.M = self.M * 2
 
 			# approx hessian (make sur its symmetric)
-			Hx_t = ((Gt.t() @ D) + (D.t() @ Gt)) / 2
-			Hx_t = Ht_x + (self.M/2) * torch.eye(self.N) * Dt.norm()* eps_t.norm()
+			Hx_t = ((Gt.t() @ Dt) + (Dt.t() @ Gt)) / 2
+			Hx_t = Hx_t + (self.M/2) * torch.eye(self.N) * Dt.norm()* eps_t.norm()
 
 			# find alpha_t optimal
-			alpha_t = ...
+			self.alpha_t = self.find_alpha(x, gx_t, Hx_t, Dt)
 
-			x_next = x + Dt @ alpha_t
+			x_next = x + Dt @ self.alpha_t
 			
 		# logging quantities on tracker
+		"""
 		self.tracker(bt_linesearch_count=count,
 					 L=self.L,
 					 A=A,
@@ -147,5 +151,5 @@ class QuasiNewton(Algorithm):
 					 g_norm=g_x.norm(p=2).item(),
 					 r_next = r_next,
 					 update=update)
-
+		"""
 		return x_next

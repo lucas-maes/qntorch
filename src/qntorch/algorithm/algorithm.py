@@ -1,6 +1,6 @@
 class Algorithm:
 
-	def __init__(self, tracker,
+	def __init__(self, x0, f, tracker,
 				n_iter=100,
 				use_eps=True, 
 				eps=10e-10
@@ -17,26 +17,25 @@ class Algorithm:
 		self.n_iter = n_iter 		# max number of iterations
 		self.use_eps = use_eps 		# use norm between two last iterates difference as stopping criterion
 		self.eps = eps 				# precision of two last iterates difference norm to stop
+		self.x0 = x0				# initial point
+		self.f = f					# function to optimize
+		self.size = x0.size(0)		# size of the problem
 
 		return
 
 	def step(self, x):
 		raise NotImplementedError
 
-	def solve(self, x0):
+	def solve(self):
 		"""
 		Find optimum of f(x) starting from x0 using self.step()
-
-		params:
-		-------
-		x0: the initial point (tensor)
 
 		returns:
 		--------
 		x: the optimum find given the algorithm params (tensor)
 		"""
 
-		x = x0				# current iterate
+		x = self.x0				# current iterate
 		x_last = None		# last iterate
 
 		for step in range(self.n_iter):

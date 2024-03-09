@@ -18,12 +18,12 @@ if __name__ == "__main__":
 	steps = 100
 	# Objects
 	tracker = OptimTracker()
-	f, grad, hessian = random_linear_function(SIZE, L=L)
-	qn = QuasiNewton(tracker, f, grad, hessian, L=L, n_iter=steps, use_eps=False)
+	f, _, _ = random_linear_function(SIZE, L=L)
+	x0 = torch.randn(SIZE, requires_grad=True) # initial condition
+	qn = QuasiNewton(x0, f, tracker, L=L, n_iter=steps, use_eps=False)
 
 	# Testing the solver
-	x0 = torch.randn(SIZE, requires_grad=True)
-	qn.solve(x0)
+	qn.solve()
 
 	condi_num = [condition_number(torch.tensor(X)).item() for X in qn.tracker.get("H_x")]
 	

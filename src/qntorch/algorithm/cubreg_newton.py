@@ -8,28 +8,24 @@ from qntorch.utils import grad, hessian
 
 class CubicRegNewton(Algorithm):
 
-	def __init__(self, tracker, f, grad, hessian, L=1.0, **kwargs):
+	def __init__(self, x0, f, tracker, L=1.0, **kwargs):
 
 		""" Cubic Newton Optimizer
 
 		params:
 		-------
+		x0: the initial point (tensor)
 		f: a function that can be evaluated given a tensor (callable)
-		grad: the gradient of f (callable)
-		hessian: the hessiance of f (callable)
 		L: the lipshitz constant of the gradient (float)
 		"""
 
-		super().__init__(tracker, **kwargs)
+		super().__init__(x0, f, tracker, **kwargs)
 
-		self.f = f
-		self.grad = grad
-		self.hessian = hessian
 		self.L = L
 
 		return
 
-	def _next_r(self, x, A, V, proj_g):
+	def _next_r(self, A, V, proj_g):
 		"""
 		Find r_k+1 given x where r_k+1 = ||x_t+1 - x_t||
 
@@ -126,7 +122,7 @@ class CubicRegNewton(Algorithm):
 		"""
 
 		# compute r_next
-		r_next, preconditioner = self._next_r(x, A, V, proj_g)
+		r_next, preconditioner = self._next_r(A, V, proj_g)
 
 		# compute the update direction
 		updt = V @ preconditioner

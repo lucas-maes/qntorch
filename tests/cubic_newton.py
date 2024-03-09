@@ -19,11 +19,11 @@ if __name__ == "__main__":
 	# Objects
 	tracker = OptimTracker()
 	f, grad, hessian = random_linear_function(SIZE, L=L)
-	cn = CubicRegNewton(tracker, f, grad, hessian, L=L, n_iter=steps, use_eps=False)
+	x0 = torch.randn(SIZE, requires_grad=True) # initial condition
+	cn = CubicRegNewton(x0, f, tracker, L=L, n_iter=steps, use_eps=False)
 
 	# Testing the solver
-	x0 = torch.randn(SIZE, requires_grad=True)
-	cn.solve(x0)
+	cn.solve()
 
 	condi_num = [condition_number(torch.tensor(X)).item() for X in cn.tracker.get("H_x")]
 	
