@@ -7,7 +7,7 @@ under construction.
 Inside the root directory of the package `qntorch/`, run the following command:
 
 ```bash
-pip3 install -e.
+pip3 install -e .
 ```
 
 ## Usage
