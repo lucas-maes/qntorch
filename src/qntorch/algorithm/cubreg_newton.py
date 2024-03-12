@@ -132,7 +132,7 @@ class CubicRegNewton(Algorithm):
 
 		return x_next, r_next, updt
 
-	def step(self, x):
+	def step(self, x, g=None, H=None):
 		"""
 		Take an cubic newton optimization step from the current iterate
 	
@@ -151,8 +151,8 @@ class CubicRegNewton(Algorithm):
 
 		# ---  compute useful quantities (one-time) ---
 
-		H_x = hessian(self.f, x)
-		g_x = grad(self.f, x)
+		H_x = hessian(self.f, x) if H is None else H
+		g_x = grad(self.f, x) if g is None else g
 
 		f_x = self.f(x)
 		I = torch.eye(H_x.size(0))

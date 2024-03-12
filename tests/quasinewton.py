@@ -2,7 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 
-from qntorch.algorithm import QuasiNewton
+from qntorch.algorithm import T1QuasiNewton
 from qntorch.utils import random_linear_function, condition_number
 from qntorch.tracker import OptimTracker
 
@@ -14,13 +14,13 @@ if __name__ == "__main__":
 
 	# Global variables
 	SIZE = 100
-	L = 1.0
+	M0 = 1.0
 	steps = 100
 	# Objects
 	tracker = OptimTracker()
-	f, _, _ = random_linear_function(SIZE, L=L)
-	x0 = torch.randn(SIZE, requires_grad=True) # initial condition
-	qn = QuasiNewton(x0, f, tracker, L=L, n_iter=steps, use_eps=False)
+	f, _, _ = random_linear_function(SIZE, L=M0)
+	x0 = torch.randn(SIZE, requires_grad=False) # initial condition
+	qn = T1QuasiNewton(x0, f, tracker, M0=M0, n_iter=steps, use_eps=False)
 
 	# Testing the solver
 	qn.solve()

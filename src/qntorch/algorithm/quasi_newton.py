@@ -3,29 +3,29 @@ import torch
 from qntorch.algorithm import Algorithm, CubicRegNewton
 from qntorch.utils import grad
 
-class QuasiNewton(Algorithm):
+class T1QuasiNewton(Algorithm):
 
-	def __init__(self, x0, f, tracker, L=1.0, N=25, **kwargs):
+	def __init__(self, x0, f, tracker, M0=1.0, N=25, **kwargs):
 
-		""" Quasi Newton Optimizer
+		""" Type-1 Quasi Newton Optimizer with Guarentees from https://arxiv.org/abs/2305.19179
 
 		params:
 		-------
 		x0: the initial point (tensor)
 		f: a function that can be evaluated given a tensor (callable)
-		L: the lipshitz constant of the gradient (float)
+		M0: the initial smoothness constant guess (float)
 		"""
 
 		super().__init__(x0, f, tracker, **kwargs)
 
-		self.M = L
+		self.M = M0
 		self.N = N
 
-		self.Dt = torch.randn((self.size, self.N))
-		self.Gt = torch.randn((self.size, self.N))
-		self.Yt = torch.randn((self.size, self.N))
-		self.Zt = torch.randn((self.size, self.N))
-		self.alpha_t = torch.randn(self.N)
+		self.Dt = x0.unsqueeze(1)
+		self.Gt = torch.tensor([])
+		self.Yt = torch.randn_like(self.Dt)
+		self.Zt = torch.randn_like(self.Dt)
+		self.alpha_t = torch.zeros(1)
 
 		return
 
@@ -64,11 +64,16 @@ class QuasiNewton(Algorithm):
 	def orth_forward_estimate(self, xt, h, Dt_prev, Gt_prev, Yt_prev, Zt_prev):
 
 		# if # col of Dt_prev, Gt_prev, Yt_prev, Zt_prev >= N, remove the first column
-
 		Dt_prev = Dt_prev[:, -(self.N-1):]
-		Gt_prev = Gt_prev[:, -(self.N-1):]
-		Yt_prev = Yt_prev[:, -(self.N-1):]
-		Zt_prev = Zt_prev[:, -(self.N-1):]
+
+		if Gt_prev.nelement() > 0:
+			Gt_prev = Gt_prev[:, -(self.N-1):]
+
+		if Yt_prev.nelement() > 0:
+			Yt_prev = Yt_prev[:, -(self.N-1):]
+		
+		if Zt_prev.nelement() > 0:
+			Zt_prev = Zt_prev[:, -(self.N-1):]
 
 		# compute gt = grad(f, xt)
 		gt = grad(self.f, xt)
@@ -80,7 +85,6 @@ class QuasiNewton(Algorithm):
 		# compute orthogonal forward estimate
 		xt_half = xt + h * dt
 
-
 		# append new column to Dt_prev, Gt_prev, Yt_prev, Zt_prev
 		Yt = torch.cat((Yt_prev, xt_half.unsqueeze(1)), dim=1)
 		Zt = torch.cat((Zt_prev, xt.unsqueeze(1)), dim=1)
@@ -91,9 +95,14 @@ class QuasiNewton(Algorithm):
 		return (gt, Dt, Gt, Yt, Zt, eps_t)
 
 	def find_alpha(self, x, gx_t, Hx_t, Dt):
-		subf = lambda alpha: self.f(x) + gx_t.t() @ (Dt @ alpha) + (1/2) * (alpha.t() @ Hx_t @ alpha) + (self.M/6) * (Dt @ alpha).norm(p=2).pow(3)
-		solver = CubicRegNewton(self.alpha_t, subf, self.tracker, L=self.M) # build the solver
-		return solver.solve() # solve the problem
+		ford_term = lambda alpha : gx_t.t() @ Dt @ alpha
+		sord_term = lambda alpha : (1/2) * (alpha.t() @ Hx_t @ alpha)
+		reg_term = lambda alpha : (self.M/6) * (Dt @ alpha).norm(p=2).pow(3)
+		subf = lambda alpha: self.f(x) + ford_term(alpha) + sord_term(alpha) + reg_term(alpha)
+
+		# create initial alpha0 with right dimension
+		alpha0 = torch.cat((self.alpha_t, torch.zeros(1)))  if self.alpha_t.size(0) < self.N else self.alpha_t
+		return mini_cubnewton(alpha0, subf, Dt.t()@gx_t, Hx_t, self.tracker, M0=self.M, n_iter=200, use_eps=True, eps=10e-10)
 
 	def step(self, x, h=10e-9):
 
@@ -107,7 +116,7 @@ class QuasiNewton(Algorithm):
 
 		# approx hessian (make sur its symmetric)
 		Hx_t = ((self.Gt.t() @ self.Dt) + (self.Dt.t() @ self.Gt)) / 2
-		Hx_t = Hx_t + (self.M/2) * torch.eye(self.N) * self.Dt.norm()* eps_t.norm()
+		Hx_t = Hx_t + (self.M/2) * torch.eye(Hx_t.size(0)) * self.Dt.norm()* eps_t.norm()
 
 		# find alpha_t optimal
 		self.alpha_t = self.find_alpha(x, gx_t, Hx_t, self.Dt)
@@ -149,4 +158,46 @@ class QuasiNewton(Algorithm):
 					 r_next = r_next,
 					 update=update)
 		"""
+		
 		return x_next
+	
+
+def mini_cubnewton(x0, f, g, H, tracker, M0=1, n_iter=200, use_eps=True, eps=10e-10):
+	"""
+	Find optimum of f(x) starting from x0 using cubic newton regularized solver
+
+	returns:
+	--------
+	x: the optimum find given the algorithm params (tensor)
+	"""
+	
+	# create the solver
+	solver = CubicRegNewton(x0, f, tracker, L=M0)
+
+	# iterate state
+	x = x0				# current iterate
+	x_last = None		# last iterate
+
+	# solve the problem
+	for step in range(n_iter):
+		# current iterate become last iterate
+		x_last = x
+
+		# take a optimization step define our new point
+		x = solver.step(x, g=g, H=H)
+
+		if use_eps:
+			# compute norm between diff of two last iterates
+			iter_dist = (x-x_last).norm(p=2)
+
+			# log
+			tracker(x_last=x_last,
+						x=x,
+						step=step+1,
+						iter_dist=iter_dist.item())
+
+			# if small enough stop training
+			if iter_dist <= eps:
+				break
+
+	return x

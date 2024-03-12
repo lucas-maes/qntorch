@@ -35,10 +35,16 @@ x_star = cn.solve()
 print(x_star)
 ```
 
-## TODOS:
+## TODO
 
-- [X] Debug and make sure everything works properly  
-- [ ] Adapt CubicNewton class into a clean torch.optim Optimizer class
-- [ ] Run experiment to make sure it is still working when migrate to optim class
-- [ ] Make algorithmic and numerical stability improvement
-- [ ] Adapt code for stochasticity
+### Current
+
+- [X] [T1QN] Update the initialization of Dt, Gt, Yt, Zt, alpha_t
+- [ ] [T1QN] Adapt the CubicNewton solver to find alpha_t opt
+- [ ] [T1QN] Fix numerical stability issue if Hessian is not PSD (with pseudo inverse)
+
+### Overall
+- [ ] [All] Adapt algo class into a clean torch.optim Optimizer class
+- [ ] [All] Run experiment to make sure it is still working when migrate to optim class vs original implem
+- [ ] [All] Make algorithmic and numerical stability improvement
+- [ ] [T1QN] Adapt code for stochasticity
