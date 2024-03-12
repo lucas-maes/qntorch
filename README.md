@@ -35,7 +35,15 @@ x_star = cn.solve()
 print(x_star)
 ```
 
+<<<<<<< HEAD
 ## TODO
+=======
+## Algorithm
+- `CubRegNewton`  - Cubic Regularized Newton presented in https://link.springer.com/article/10.1007/s10107-006-0706-8
+- `T1QuasiNewton` - Type-I Quasi-Newton presented in https://arxiv.org/abs/2305.19179
+
+## TODOS:
+>>>>>>> 753dad5b4648143593e16ce4e66f191c5cf9256c
 
 ### Current
 
