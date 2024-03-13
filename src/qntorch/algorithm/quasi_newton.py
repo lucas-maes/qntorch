@@ -21,11 +21,11 @@ class T1QuasiNewton(Algorithm):
 		self.M = M0
 		self.N = N
 
-		self.Dt = x0.unsqueeze(1)
+		self.Dt = torch.tensor([])
 		self.Gt = torch.tensor([])
-		self.Yt = torch.randn_like(self.Dt)
-		self.Zt = torch.randn_like(self.Dt)
-		self.alpha_t = torch.zeros(1)
+		self.Yt = torch.tensor([])
+		self.Zt = torch.tensor([])
+		self.alpha_t = torch.tensor([])
 
 		return
 
@@ -64,7 +64,8 @@ class T1QuasiNewton(Algorithm):
 	def orth_forward_estimate(self, xt, h, Dt_prev, Gt_prev, Yt_prev, Zt_prev):
 
 		# if # col of Dt_prev, Gt_prev, Yt_prev, Zt_prev >= N, remove the first column
-		Dt_prev = Dt_prev[:, -(self.N-1):]
+		if Dt_prev.nelement() > 0:
+			Dt_prev = Dt_prev[:, -(self.N-1):]
 
 		if Gt_prev.nelement() > 0:
 			Gt_prev = Gt_prev[:, -(self.N-1):]
@@ -79,7 +80,11 @@ class T1QuasiNewton(Algorithm):
 		gt = grad(self.f, xt)
 
 		# compiute dt = - dtild / ||dtild||
-		dtild = gt - Dt_prev @ (Dt_prev.t() @ gt)
+		if Dt_prev.nelement() == 0:
+			dtild = gt
+		else:
+			dtild = gt - Dt_prev @ (Dt_prev.t() @ gt)
+		
 		dt = - dtild / dtild.norm(p=2)
 
 		# compute orthogonal forward estimate
@@ -94,15 +99,12 @@ class T1QuasiNewton(Algorithm):
 
 		return (gt, Dt, Gt, Yt, Zt, eps_t)
 
-	def find_alpha(self, x, gx_t, Hx_t, Dt):
-		ford_term = lambda alpha : gx_t.t() @ Dt @ alpha
-		sord_term = lambda alpha : (1/2) * (alpha.t() @ Hx_t @ alpha)
-		reg_term = lambda alpha : (self.M/6) * (Dt @ alpha).norm(p=2).pow(3)
-		subf = lambda alpha: self.f(x) + ford_term(alpha) + sord_term(alpha) + reg_term(alpha)
+	def find_alpha(self, alpha0, x, gx_t, Hx_t, Dt):
 
-		# create initial alpha0 with right dimension
-		alpha0 = torch.cat((self.alpha_t, torch.zeros(1)))  if self.alpha_t.size(0) < self.N else self.alpha_t
-		return mini_cubnewton(alpha0, subf, Dt.t()@gx_t, Hx_t, self.tracker, M0=self.M, n_iter=200, use_eps=True, eps=10e-10)
+		def subf(alpha):
+			return self.f(x) + (gx_t.t() @ Dt @ alpha) + (1/2) * (alpha.t() @ Hx_t @ alpha) + (self.M/6) * (Dt @ alpha).norm(p=2).pow(3)
+
+		return mini_cubnewton(alpha0, subf, Dt.t()@gx_t, Hx_t, self.tracker, M0=self.M, n_iter=10)
 
 	def step(self, x, h=10e-9):
 
@@ -115,11 +117,15 @@ class T1QuasiNewton(Algorithm):
 		# line search to find optimal coefficient (steps size)
 
 		# approx hessian (make sur its symmetric)
-		Hx_t = ((self.Gt.t() @ self.Dt) + (self.Dt.t() @ self.Gt)) / 2
-		Hx_t = Hx_t + (self.M/2) * torch.eye(Hx_t.size(0)) * self.Dt.norm()* eps_t.norm()
+		Hfirst = ((self.Gt.t() @ self.Dt) + (self.Dt.t() @ self.Gt)) / 2
+		const = torch.eye(Hfirst.size(0)) * self.Dt.norm()* eps_t.norm()
+		Hx_t = Hfirst + (self.M/2) * const
+
+		# create initial alpha0 with right dimension
+		self.alpha_t = torch.cat((self.alpha_t, torch.zeros(1)))  if self.alpha_t.size(0) < self.N else self.alpha_t
 
 		# find alpha_t optimal
-		self.alpha_t = self.find_alpha(x, gx_t, Hx_t, self.Dt)
+		self.alpha_t = self.find_alpha(self.alpha_t, x, gx_t, Hx_t, self.Dt)
 
 		# compute next iterate
 		x_next = x + self.Dt @ self.alpha_t
@@ -135,11 +141,10 @@ class T1QuasiNewton(Algorithm):
 			self.M = self.M * 2
 
 			# approx hessian (make sur its symmetric)
-			Hx_t = ((self.Gt.t() @ self.Dt) + (self.Dt.t() @ self.Gt)) / 2
-			Hx_t = Hx_t + (self.M/2) * torch.eye(self.N) * self.Dt.norm() * eps_t.norm()
+			Hx_t = Hfirst + (self.M/2) * const
 
 			# find alpha_t optimal
-			self.alpha_t = self.find_alpha(x, gx_t, Hx_t, self.Dt)
+			self.alpha_t = self.find_alpha(self.alpha_t, x, gx_t, Hx_t, self.Dt)
 
 			x_next = x + self.Dt @ self.alpha_t
 			
@@ -162,7 +167,7 @@ class T1QuasiNewton(Algorithm):
 		return x_next
 	
 
-def mini_cubnewton(x0, f, g, H, tracker, M0=1, n_iter=200, use_eps=True, eps=10e-10):
+def mini_cubnewton(x0, f, g, H, tracker, M0=1, n_iter=200, use_eps=False, eps=10e-10):
 	"""
 	Find optimum of f(x) starting from x0 using cubic newton regularized solver
 

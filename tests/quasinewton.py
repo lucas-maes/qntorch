@@ -13,9 +13,9 @@ if __name__ == "__main__":
 	torch.set_default_dtype(torch.float64)
 
 	# Global variables
-	SIZE = 100
+	SIZE = 10
 	M0 = 1.0
-	steps = 100
+	steps = 10
 	# Objects
 	tracker = OptimTracker()
 	f, _, _ = random_linear_function(SIZE, L=M0)
