@@ -1,7 +1,11 @@
 
 import torch
-from qntorch.algorithm import Algorithm, CubicRegNewton
-from qntorch.utils import grad
+
+from scipy.optimize import bisect
+
+from qntorch.algorithm import Algorithm, MiniCRN
+from qntorch.utils import grad, hessian
+
 
 class T1QuasiNewton(Algorithm):
 
@@ -37,7 +41,9 @@ class T1QuasiNewton(Algorithm):
 
 		cond = fx_t + gx_t.t() @ Dalpha_t + (1/2) * (alpha_t.t() @ Hx_t @ alpha_t) + (self.M/6) * Dalpha_t.norm(p=2).pow(3)
 
-		return fy >= cond
+		print((gx_t.t() @ Dalpha_t + (1/2) * (alpha_t.t() @ Hx_t @ alpha_t) + (self.M/6) * Dalpha_t.norm(p=2).pow(3)) > 0)
+
+		return fy <= cond
 
 	def _update_Gt_eps(self, xt, Yt, Zt):
 		# TODO optim: store all previous grad and compute just grad for the new element that I append
@@ -103,13 +109,15 @@ class T1QuasiNewton(Algorithm):
 
 		def subf(alpha):
 			return self.f(x) + (gx_t.t() @ Dt @ alpha) + (1/2) * (alpha.t() @ Hx_t @ alpha) + (self.M/6) * (Dt @ alpha).norm(p=2).pow(3)
-
-		return mini_cubnewton(alpha0, subf, Dt.t()@gx_t, Hx_t, self.tracker, M0=self.M, n_iter=10)
+		
+		return MiniCRN(alpha0, subf, self.tracker, g=Dt.t()@gx_t, H=Hx_t, M0=self.M, n_iter=100).solve()
 
 	def step(self, x, h=10e-9):
 
 		# update Yt, Zt, Dt, Gt, eps_t
 		gx_t, self.Dt, self.Gt, self.Yt, self.Zt, eps_t = self.orth_forward_estimate(x, h, self.Dt, self.Gt, self.Yt, self.Zt)
+
+		print("grad: ", gx_t.norm().item())
 
 		# devise smoothness constant M by 2 by default
 		self.M = self.M / 2
@@ -165,44 +173,3 @@ class T1QuasiNewton(Algorithm):
 		"""
 		
 		return x_next
-	
-
-def mini_cubnewton(x0, f, g, H, tracker, M0=1, n_iter=200, use_eps=False, eps=10e-10):
-	"""
-	Find optimum of f(x) starting from x0 using cubic newton regularized solver
-
-	returns:
-	--------
-	x: the optimum find given the algorithm params (tensor)
-	"""
-	
-	# create the solver
-	solver = CubicRegNewton(x0, f, tracker, L=M0)
-
-	# iterate state
-	x = x0				# current iterate
-	x_last = None		# last iterate
-
-	# solve the problem
-	for step in range(n_iter):
-		# current iterate become last iterate
-		x_last = x
-
-		# take a optimization step define our new point
-		x = solver.step(x, g=g, H=H)
-
-		if use_eps:
-			# compute norm between diff of two last iterates
-			iter_dist = (x-x_last).norm(p=2)
-
-			# log
-			tracker(x_last=x_last,
-						x=x,
-						step=step+1,
-						iter_dist=iter_dist.item())
-
-			# if small enough stop training
-			if iter_dist <= eps:
-				break
-
-	return x

@@ -18,20 +18,21 @@ if __name__ == "__main__":
 	steps = 10
 	# Objects
 	tracker = OptimTracker()
-	f, _, _ = random_linear_function(SIZE, L=M0)
+	f, _, _ = random_linear_function(SIZE, L=0)
 	x0 = torch.randn(SIZE, requires_grad=False) # initial condition
 	qn = T1QuasiNewton(x0, f, tracker, M0=M0, n_iter=steps, use_eps=False)
 
 	# Testing the solver
 	qn.solve()
 
-	condi_num = [condition_number(torch.tensor(X)).item() for X in qn.tracker.get("H_x")]
-	
+	#condi_num = [condition_number(torch.tensor(X)).item() for X in qn.tracker.get("H_x")]
+	"""
 	plt.plot(condi_num)
 	plt.xlabel("steps")
 	plt.ylabel("condition number")
 	plt.show()
-	
+	"""
+
 	# Plot optim path : {f(x_k) | forall k}
 	plt.semilogy(qn.tracker.get("g_norm"))
 	plt.xlabel("steps")
