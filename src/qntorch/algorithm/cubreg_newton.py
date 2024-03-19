@@ -265,7 +265,7 @@ class MiniCRN(Algorithm):
 
 		# ---  compute useful quantities (one-time) ---
 		H_x = hessian(self.f, x) if self.H is None else self.H
-		g_x = grad(self.f, x) if self.g is None else self.g
+		g_x = grad(self.f, x) #if self.g is None else self.g
 
 		# compute eigen-value decomposition
 		A, V = torch.linalg.eig(H_x)

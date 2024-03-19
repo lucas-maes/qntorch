@@ -42,6 +42,9 @@ def random_linear_function(size, L=1.0):
 
 def condition_number(X):
 
+	if X.numel() == 1:
+		return torch.tensor(1.0)
+
 	A, _ = torch.linalg.eig(X)
 	A = A.real
 

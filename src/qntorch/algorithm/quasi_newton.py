@@ -41,7 +41,7 @@ class T1QuasiNewton(Algorithm):
 
 		cond = fx_t + gx_t.t() @ Dalpha_t + (1/2) * (alpha_t.t() @ Hx_t @ alpha_t) + (self.M/6) * Dalpha_t.norm(p=2).pow(3)
 
-		print((gx_t.t() @ Dalpha_t + (1/2) * (alpha_t.t() @ Hx_t @ alpha_t) + (self.M/6) * Dalpha_t.norm(p=2).pow(3)) > 0)
+		assert (gx_t.t() @ Dalpha_t + (1/2) * (alpha_t.t() @ Hx_t @ alpha_t) + (self.M/6) * Dalpha_t.norm(p=2).pow(3)) <= 0
 
 		return fy <= cond
 
@@ -110,23 +110,19 @@ class T1QuasiNewton(Algorithm):
 		def subf(alpha):
 			return self.f(x) + (gx_t.t() @ Dt @ alpha) + (1/2) * (alpha.t() @ Hx_t @ alpha) + (self.M/6) * (Dt @ alpha).norm(p=2).pow(3)
 		
-		return MiniCRN(alpha0, subf, self.tracker, g=Dt.t()@gx_t, H=Hx_t, M0=self.M, n_iter=100).solve()
+		return MiniCRN(alpha0, subf, self.tracker, g=Dt.t()@gx_t, H=Hx_t, M0=self.M, n_iter=1000).solve()
 
 	def step(self, x, h=10e-9):
 
 		# update Yt, Zt, Dt, Gt, eps_t
 		gx_t, self.Dt, self.Gt, self.Yt, self.Zt, eps_t = self.orth_forward_estimate(x, h, self.Dt, self.Gt, self.Yt, self.Zt)
 
-		print("grad: ", gx_t.norm().item())
-
 		# devise smoothness constant M by 2 by default
 		self.M = self.M / 2
 
-		# line search to find optimal coefficient (steps size)
-
 		# approx hessian (make sur its symmetric)
 		Hfirst = ((self.Gt.t() @ self.Dt) + (self.Dt.t() @ self.Gt)) / 2
-		const = torch.eye(Hfirst.size(0)) * self.Dt.norm()* eps_t.norm()
+		const = torch.eye(Hfirst.size(0)) * self.Dt.norm() * eps_t.norm()
 		Hx_t = Hfirst + (self.M/2) * const
 
 		# create initial alpha0 with right dimension
@@ -157,19 +153,13 @@ class T1QuasiNewton(Algorithm):
 			x_next = x + self.Dt @ self.alpha_t
 			
 		# logging quantities on tracker
-		"""
+		
 		self.tracker(bt_linesearch_count=count,
-					 L=self.L,
-					 A=A,
-					 V=V,
-					 f_x=f_x,
-					 g_k=proj_g,
-					 H_x=H_x,
-					 g_x=g_x,
-					 true_update=(torch.linalg.solve((H_x + (self.L/2)*r_next*I) , g_x)), 
-					 g_norm=g_x.norm(p=2).item(),
-					 r_next = r_next,
-					 update=update)
-		"""
+					 M=self.M,
+					 f_x=self.f(x),
+					 g_k=self.Dt.T @ gx_t,
+					 H_x=Hx_t,
+					 g_x=gx_t,
+					 g_norm=gx_t.norm(p=2).item())
 		
 		return x_next
